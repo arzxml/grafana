@@ -1,17 +1,15 @@
 # There is support for influxdb v3 (core) OSS, but it's highly recommended to use Influxdb 1.x versions with this project. 
 
 services:
-  garmin-fetch-data:
+  garmin-data-exporter:
+    build: ./garmin_data_exporter
     restart: unless-stopped
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: garmin-fetch-data
+    container_name: garmin_data_exporter
     # user: root # Runs the container as root user, uncomment this line if you are getting permission issues which can't be resolved otherwise. For this, you also need to change the below volume mount from './garminconnect-tokens:/home/appuser/.garminconnect' to './garminconnect-tokens:/root/.garminconnect' to ensure the token files persist during container rebuilding. 
     depends_on:
       - influxdb
     volumes:
-      - ./garminconnect-tokens:/home/appuser/.garminconnect # (persistent tokens storage - garminconnect-tokens folder must be owned by 1000:1000) - should be './garminconnect-tokens:/root/.garminconnect' instead if you are using using user: root
+      - ./garmin_data_exporter/garminconnect-tokens:/home/appuser/.garminconnect # (persistent tokens storage - garminconnect-tokens folder must be owned by 1000:1000) - should be './garminconnect-tokens:/root/.garminconnect' instead if you are using using user: root
     environment:
       - INFLUXDB_HOST=influxdb
       - INFLUXDB_PORT=8086 # Influxdb V3 maps to 8181 instead of 8086 of V1
@@ -41,6 +39,7 @@ services:
       # - FORCE_REPROCESS_ACTIVITIES=True # Enables re-processing of FIT files on iterative updates when set to True (default), setting to False may save processing time but known for skipping activities
     
   influxdb:
+    build: ./influxdb
     restart: unless-stopped
     container_name: influxdb
     hostname: influxdb
@@ -49,22 +48,13 @@ services:
       - INFLUXDB_USER=influxdb_user
       - INFLUXDB_USER_PASSWORD=influxdb_secret_password
       - INFLUXDB_DATA_INDEX_VERSION=tsi1
-      #############################################################
-      # The following ENV variables are applicable for InfluxDB V3
-      #############################################################
-      # - INFLUXDB3_MAX_HTTP_REQUEST_SIZE=10485760
-      # - INFLUXDB3_NODE_IDENTIFIER_PREFIX=Influxdb-node1
-      # - INFLUXDB3_BUCKET=GarminStats
-      # - INFLUXDB3_OBJECT_STORE=file
-      # - INFLUXDB3_DB_DIR=/data
-      # - INFLUXDB3_QUERY_FILE_LIMIT=5000 # this set to be a very high value if you want to view long term data
     expose:
-      - '8086' # Influxdb V3 should expose "8181" (Change INFLUXDB_PORT on garmin-fetch-data appropriately for InfluxDB V3)
+      - '8086'
     volumes:
-      - influxdb_data:/var/lib/influxdb # InfluxDB V3 bind mount should be set like - influxdb_data:/data if you set INFLUXDB3_DB_DIR=/data (instead of /var/lib/influxdb)
-    image: 'influxdb:1.11' # You must change this to 'quay.io/influxdb/influxdb3-core:latest' for influxdb V3
+      - influxdb_data:/var/lib/influxdb
 
   grafana:
+    build: ./grafana
     restart: unless-stopped
     container_name: grafana
     hostname: grafana
@@ -81,8 +71,6 @@ services:
       - GF_DATE_FORMATS_INTERVAL_YEAR=YYYY
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./Grafana_Datasource:/etc/grafana/provisioning/datasources # (optional) Self provisioning influxdb datasource
-      - ./Grafana_Dashboard:/etc/grafana/provisioning/dashboards # (optional) self provisioning grafana dashboard
     ports:
       - '3000:3000'
     image: 'grafana/grafana:latest'

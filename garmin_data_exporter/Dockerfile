@@ -5,14 +5,15 @@ ENV PYTHONUNBUFFERED=1
 
 RUN apt update && apt install build-essential -y
 
-COPY src /app/
-COPY pyproject.toml /app/
-COPY uv.lock /app/
+COPY . /app/
+# COPY pyproject.toml /app/
+# COPY uv.lock /app/
 
 WORKDIR /app
-RUN uv sync --locked
+
+RUN pip install --no-cache-dir -r requirements.txt
 
 RUN groupadd --gid 1000 appuser && useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser && chown -R appuser:appuser /app
 USER appuser
 
-CMD ["uv", "run", "garmin_grafana/garmin_fetch.py"]
+CMD ["python", "garmin_fetch.py"]
