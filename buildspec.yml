@@ -34,5 +34,12 @@ phases:
       - docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/grafana:$IMAGE_TAG
       - docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/influxdb:$IMAGE_TAG
 
+      - echo Writing imagedefinitions.json...
+      - printf '[{"name":"garmin_data_exporter","imageUri":"%s"},{"name":"grafana","imageUri":"%s"},{"name":"influxdb","imageUri":"%s"}]' \
+        "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/garmin_data_exporter:$IMAGE_TAG" \
+        "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/grafana:$IMAGE_TAG" \
+        "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/influxdb:$IMAGE_TAG" \
+        > imagedefinitions.json
 artifacts:
-  files: '**/*'
+  files:
+    - imagedefinitions.json
