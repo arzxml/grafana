@@ -1,0 +1,198 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS Lambda Function for Garmin Data Exporter with EventBridge Scheduler'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    Description: Environment name
+
+  FunctionCodeBucket:
+    Type: String
+    Description: S3 bucket containing Lambda deployment package
+
+  FunctionCodeKey:
+    Type: String
+    Default: garmin-exporter-lambda.zip
+    Description: S3 key for Lambda deployment package
+
+  ScheduleExpression:
+    Type: String
+    Default: 'rate(5 minutes)'
+    Description: EventBridge schedule expression
+
+Resources:
+  # Lambda Execution Role
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${Environment}-garmin-exporter-lambda-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: TimestreamAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - timestream:WriteRecords
+                  - timestream:DescribeEndpoints
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - timestream:DescribeDatabase
+                  - timestream:DescribeTable
+                  - timestream:Select
+                Resource:
+                  - Fn::ImportValue: TimestreamDatabaseArn
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:garmin-exporter/*'
+        - PolicyName: EFSAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - elasticfilesystem:ClientMount
+                  - elasticfilesystem:ClientWrite
+                  - elasticfilesystem:DescribeMountTargets
+                Resource:
+                  - Fn::ImportValue: !Sub '${Environment}-EFSAccessPointArn'
+
+  # Lambda Function
+  GarminExporterFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${Environment}-garmin-data-exporter'
+      Runtime: python3.11
+      Handler: handler.lambda_handler
+      Code:
+        S3Bucket: !Ref FunctionCodeBucket
+        S3Key: !Ref FunctionCodeKey
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 900  # 15 minutes (max)
+      MemorySize: 512
+      Environment:
+        Variables:
+          TIMESTREAM_DATABASE:
+            Fn::ImportValue: TimestreamDatabaseName
+          TIMESTREAM_TABLE:
+            Fn::ImportValue: TimestreamTableName
+          AWS_REGION: !Ref AWS::Region
+          LOG_LEVEL: INFO
+          TOKEN_DIR: /mnt/efs/garmin-tokens
+          FETCH_SELECTION: daily_avg,sleep,steps,heartrate,stress,breathing,hrv,vo2,activity,race_prediction,body_composition
+      VpcConfig:
+        SecurityGroupIds:
+          - Fn::ImportValue: !Sub '${Environment}-ECSTaskSecurityGroup'
+        SubnetIds:
+          - Fn::ImportValue: !Sub '${Environment}-PrivateSubnet1'
+          - Fn::ImportValue: !Sub '${Environment}-PrivateSubnet2'
+      FileSystemConfigs:
+        - Arn:
+            Fn::ImportValue: !Sub '${Environment}-EFSAccessPointArn'
+          LocalMountPath: /mnt/efs
+      Tags:
+        - Key: Name
+          Value: !Sub '${Environment}-garmin-exporter-lambda'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CloudWatch Log Group
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${GarminExporterFunction}'
+      RetentionInDays: 30
+
+  # EventBridge Rule for Scheduled Execution
+  ScheduledRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${Environment}-garmin-exporter-schedule'
+      Description: Trigger Garmin data export every 5 minutes
+      ScheduleExpression: !Ref ScheduleExpression
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt GarminExporterFunction.Arn
+          Id: GarminExporterLambdaTarget
+
+  # Permission for EventBridge to invoke Lambda
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref GarminExporterFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ScheduledRule.Arn
+
+  # CloudWatch Alarm for Lambda Errors
+  LambdaErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${Environment}-garmin-exporter-lambda-errors'
+      AlarmDescription: Alert when Lambda function fails
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref GarminExporterFunction
+      TreatMissingData: notBreaching
+
+  # CloudWatch Alarm for Lambda Duration
+  LambdaDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${Environment}-garmin-exporter-lambda-duration'
+      AlarmDescription: Alert when Lambda approaches timeout
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 840000  # 14 minutes (approaching 15-min limit)
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref GarminExporterFunction
+      TreatMissingData: notBreaching
+
+Outputs:
+  FunctionArn:
+    Description: Lambda Function ARN
+    Value: !GetAtt GarminExporterFunction.Arn
+    Export:
+      Name: !Sub '${Environment}-GarminExporterLambdaArn'
+
+  FunctionName:
+    Description: Lambda Function Name
+    Value: !Ref GarminExporterFunction
+
+  ScheduleRuleArn:
+    Description: EventBridge Schedule Rule ARN
+    Value: !GetAtt ScheduledRule.Arn
+
+  LogGroupName:
+    Description: CloudWatch Log Group Name
+    Value: !Ref LambdaLogGroup

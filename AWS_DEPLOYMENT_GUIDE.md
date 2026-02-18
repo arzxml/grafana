@@ -2,8 +2,44 @@
 
 Deploy Garmin Data Exporter to AWS using managed services.
 
+## Architecture Options
+
+### Option 1: Lambda (Recommended) 💰
+- **Cost**: ~$2-5/month
+- **Best for**: Periodic data fetching (every 5 minutes)
+- **Pros**: Lowest cost, zero management, automatic scaling
+- **Cons**: 15-minute execution limit (typically takes 1-5 min)
+
+### Option 2: ECS Fargate
+- **Cost**: ~$15-20/month
+- **Best for**: Continuous operation, complex workflows
+- **Pros**: No time limits, full control
+- **Cons**: Higher cost, more complex
+
+This guide covers **both options**. Lambda is recommended for most users.
+
 ## Architecture
 
+### Lambda Architecture (Recommended)
+```
+┌──────────────────────────────────────────────────────┐
+│                    AWS Cloud                          │
+│                                                       │
+│  ┌─────────────┐   ┌──────────────┐   ┌───────────┐ │
+│  │ EventBridge │──▶│    Lambda    │──▶│Timestream │ │
+│  │ (Schedule)  │   │    Garmin    │   │(Database) │ │
+│  │ Every 5min  │   │   Exporter   │   └───────────┘ │
+│  └─────────────┘   └──────┬───────┘                 │
+│                            │                          │
+│                            ▼                          │
+│                      ┌───────────┐                   │
+│                      │    EFS    │                   │
+│                      │  Tokens   │                   │
+│                      └───────────┘                   │
+└──────────────────────────────────────────────────────┘
+```
+
+### ECS Fargate Architecture (Alternative)
 ```
 ┌──────────────────────────────────────────────────────┐
 │                    AWS Cloud                          │
@@ -29,11 +65,13 @@ Deploy Garmin Data Exporter to AWS using managed services.
 - Docker installed
 - Garmin Connect credentials
 
-## Quick Deployment (30 minutes)
+## Deployment Options
 
-### 1. Deploy Infrastructure
+### Option A: Lambda Deployment (Recommended)
 
-Run the automated deployment script:
+#### 1. Deploy Base Infrastructure
+
+First, deploy VPC, Timestream, and EFS:
 
 ```bash
 cd aws-infrastructure/scripts
@@ -41,27 +79,71 @@ chmod +x deploy.sh
 ./deploy.sh
 ```
 
-This will create:
+This creates:
 - VPC with private subnets and VPC endpoints
 - Timestream database and table
-- ECS Fargate cluster and service
-- EFS for persistent token storage
-- ECR repository
-- CloudWatch Logs and monitoring
+- EFS for Garmin token storage
 - (Optional) Amazon Managed Grafana
 
-### 2. Configure Secrets
+#### 2. Configure Secrets
 
-Encode your Garmin password:
+Encode your Garmin password and create secret:
+
 ```bash
+# Encode password
 echo -n "your_password" | base64
-```
 
-Create the secret in AWS Secrets Manager:
-```bash
+# Create secret
 aws secretsmanager create-secret \
   --name garmin-exporter/garmin-credentials \
   --secret-string '{
+    "GARMINCONNECT_EMAIL": "your_email@example.com",
+    "GARMINCONNECT_BASE64_PASSWORD": "your_base64_encoded_password"
+  }'
+```
+
+#### 3. Deploy Lambda Function
+
+```bash
+cd aws-infrastructure/scripts
+chmod +x deploy-lambda.sh
+./deploy-lambda.sh
+```
+
+This will:
+- Package the Lambda function with dependencies
+- Upload to S3
+- Deploy Lambda with EventBridge schedule (every 5 minutes)
+- Configure EFS mount for Garmin tokens
+
+#### 4. Verify Lambda Deployment
+
+Test the function:
+```bash
+aws lambda invoke --function-name production-garmin-data-exporter output.json
+cat output.json
+```
+
+Monitor logs:
+```bash
+aws logs tail /aws/lambda/production-garmin-data-exporter --follow
+```
+
+**Done!** Lambda will run automatically every 5 minutes.
+
+---
+
+### Option B: ECS Fargate Deployment
+
+If you prefer continuous operation or need longer execution times:
+
+#### 1. Deploy Infrastructure (Same as Option A Steps 1-2)
+
+#### 2. Deploy ECS Service
+
+The deploy.sh script also creates ECS infrastructure if you answer 'yes' to the ECS prompts.
+
+#### 3. Restart ECS Service
     "GARMINCONNECT_EMAIL": "your_email@example.com",
     "GARMINCONNECT_BASE64_PASSWORD": "your_base64_encoded_password"
   }'
