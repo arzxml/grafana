@@ -1,0 +1,41 @@
+version: 0.2
+
+env:
+  variables:
+    IMAGE_TAG: latest
+    REGION: us-east-1
+    # ACCOUNT_ID will be fetched dynamically
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws --version
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - echo "Account ID is $ACCOUNT_ID"
+      - $(aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com)
+
+  build:
+    commands:
+      - echo Building garmin_data_exporter image for AWS...
+      - cd garmin_data_exporter
+      - docker build -f Dockerfile.aws -t garmin-data-exporter .
+      - docker tag garmin-data-exporter:latest $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/garmin-data-exporter:$IMAGE_TAG
+      - docker tag garmin-data-exporter:latest $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/garmin-data-exporter:build-$CODEBUILD_BUILD_NUMBER
+      - cd ..
+
+  post_build:
+    commands:
+      - echo Pushing images to ECR...
+      - docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/garmin-data-exporter:$IMAGE_TAG
+      - docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/garmin-data-exporter:build-$CODEBUILD_BUILD_NUMBER
+      
+      - echo Writing imagedefinitions.json for ECS...
+      - printf '[{"name":"garmin-data-exporter","imageUri":"%s"}]' "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/garmin-data-exporter:$IMAGE_TAG" > imagedefinitions.json
+      
+      - echo Build completed successfully
+
+artifacts:
+  files:
+    - imagedefinitions.json
+    - aws-infrastructure/**/*
