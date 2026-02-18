@@ -1,138 +1,33 @@
-# Garmin Data Exporter
+# Garmin Data Exporter - AWS Edition
 
-Export your Garmin Connect health and fitness data to a time-series database and visualize it with Grafana.
-
-## 🚀 NEW: AWS Migration Available!
-
-**Move from InfluxDB to AWS managed services with one command!**
-
-This repository now includes a complete AWS migration solution using AWS best practices:
-- ✅ Amazon Timestream (replaces InfluxDB)
-- ✅ Amazon ECS Fargate (serverless containers)
-- ✅ Amazon Managed Grafana
-- ✅ Full automation scripts
-- ✅ Comprehensive documentation
-
-**📖 [Start with AWS Migration Index →](AWS_MIGRATION_INDEX.md)**
-
-### Quick AWS Deployment (30 minutes)
-
-```bash
-# 1. Run deployment script
-cd aws-infrastructure/scripts
-./deploy.sh
-
-# 2. Configure Garmin credentials
-aws secretsmanager create-secret \
-  --name garmin-exporter/garmin-credentials \
-  --secret-string '{"GARMINCONNECT_EMAIL":"your@email.com","GARMINCONNECT_BASE64_PASSWORD":"base64password"}'
-
-# 3. Done! Monitor with:
-aws logs tail /ecs/garmin-data-exporter --follow
-```
-
-**See [QUICKSTART_AWS.md](QUICKSTART_AWS.md) for detailed instructions.**
-
-## Architecture Options
-
-### Option 1: Docker Compose (Current)
-- Self-hosted InfluxDB
-- Self-hosted Grafana
-- Runs on single server
-- **Cost**: ~$40-45/month + maintenance
-
-### Option 2: AWS (New - Recommended)
-- Amazon Timestream (managed database)
-- Amazon Managed Grafana
-- Runs on ECS Fargate
-- **Cost**: ~$45-90/month, zero maintenance
-
-**Compare**: See [INFLUXDB_VS_TIMESTREAM.md](INFLUXDB_VS_TIMESTREAM.md)
+Export your Garmin Connect health and fitness data to Amazon Timestream and visualize with Grafana.
 
 ## Features
 
-- 📊 Export Garmin Connect data to time-series database
-- 💓 Heart rate, sleep, steps, stress, VO2 max, and more
-- 🏃 Activity data with GPS tracking
-- 📈 Beautiful Grafana dashboards
+- 📊 Export Garmin data to AWS Timestream (managed time-series database)
+- 💓 Heart rate, sleep, steps, stress, VO2 max, activities, and more
+- 🏃 GPS activity tracking with FIT file processing
+- 📈 Grafana dashboards (Amazon Managed Grafana or self-hosted)
 - 🔄 Automatic updates every 5 minutes
-- 🐳 Docker-based deployment
-- ☁️ AWS-ready with one-command deployment
+- ☁️ Fully serverless on AWS (ECS Fargate + Timestream)
+- 🔒 Enterprise security (VPC, IAM, encryption)
 
 ## What Gets Exported
 
-✅ Daily Statistics (avg heart rate, calories, steps, etc.)  
-✅ Sleep Data (duration, deep sleep, REM, etc.)  
+✅ Daily Statistics (calories, steps, heart rate averages)  
+✅ Sleep Data (duration, deep sleep, REM, light sleep)  
 ✅ Intraday Steps  
 ✅ Intraday Heart Rate  
-✅ Intraday Stress  
+✅ Intraday Stress Levels  
 ✅ Intraday Breathing Rate  
 ✅ Heart Rate Variability (HRV)  
-✅ VO2 Max  
+✅ VO2 Max Estimates  
 ✅ Body Composition  
 ✅ Race Predictions  
-✅ Activities with GPS data  
-
-## Quick Start - Docker Compose
-
-### Prerequisites
-- Docker and Docker Compose
-- Garmin Connect account
-
-### Setup
-
-1. **Clone Repository**
-   ```bash
-   git clone https://github.com/arzxml/grafana.git
-   cd grafana
-   ```
-
-2. **Configure Environment**
-   Edit `docker-compose.yml` with your Garmin credentials:
-   ```yaml
-   environment:
-     - GARMINCONNECT_EMAIL=your_email@example.com
-     - GARMINCONNECT_BASE64_PASSWORD=your_base64_password
-   ```
-
-3. **Start Services**
-   ```bash
-   docker-compose up -d
-   ```
-
-4. **Access Grafana**
-   - URL: http://localhost:3000
-   - Username: `admin`
-   - Password: `admin`
-
-## Quick Start - AWS
-
-See [AWS_MIGRATION_INDEX.md](AWS_MIGRATION_INDEX.md) for complete AWS deployment guide.
-
-## Documentation
-
-### AWS Migration Documentation
-- **[AWS_MIGRATION_INDEX.md](AWS_MIGRATION_INDEX.md)** - Start here for AWS migration
-- **[QUICKSTART_AWS.md](QUICKSTART_AWS.md)** - 30-minute AWS deployment
-- **[AWS_MIGRATION_GUIDE.md](AWS_MIGRATION_GUIDE.md)** - Comprehensive guide
-- **[INFLUXDB_VS_TIMESTREAM.md](INFLUXDB_VS_TIMESTREAM.md)** - Feature comparison
-
-### Configuration
-- Supported data types can be configured via `FETCH_SELECTION` environment variable
-- Update interval via `UPDATE_INTERVAL_SECONDS` (default: 300)
-- See `docker-compose.yml` for all configuration options
+✅ Activities with GPS Data  
 
 ## Architecture
 
-### Docker Compose Architecture
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Garmin    │────▶│  InfluxDB   │────▶│   Grafana   │
-│  Exporter   │     │             │     │             │
-└─────────────┘     └─────────────┘     └─────────────┘
-```
-
-### AWS Architecture
 ```
 ┌──────────────────────────────────────────────────────┐
 │                    AWS Cloud                          │
@@ -151,112 +46,177 @@ See [AWS_MIGRATION_INDEX.md](AWS_MIGRATION_INDEX.md) for complete AWS deployment
 └──────────────────────────────────────────────────────┘
 ```
 
-## Supported Databases
+## Quick Start
 
-### InfluxDB (Docker Compose)
-- InfluxDB 1.x (recommended)
-- InfluxDB 3.x (Core OSS) - experimental support
+### Prerequisites
+- AWS Account with admin access
+- AWS CLI v2 installed and configured
+- Docker installed
+- Garmin Connect account
 
-### Amazon Timestream (AWS)
-- Fully managed time-series database
-- Automatic scaling and high availability
-- See AWS migration docs for setup
+### Deploy to AWS (30 minutes)
+
+1. **Clone Repository**
+   ```bash
+   git clone https://github.com/arzxml/grafana.git
+   cd grafana
+   ```
+
+2. **Run Deployment Script**
+   ```bash
+   cd aws-infrastructure/scripts
+   chmod +x deploy.sh
+   ./deploy.sh
+   ```
+
+3. **Configure Garmin Credentials**
+   ```bash
+   # Encode password
+   echo -n "your_password" | base64
+   
+   # Create secret
+   aws secretsmanager create-secret \
+     --name garmin-exporter/garmin-credentials \
+     --secret-string '{
+       "GARMINCONNECT_EMAIL": "your@email.com",
+       "GARMINCONNECT_BASE64_PASSWORD": "base64_encoded_password"
+     }'
+   ```
+
+4. **Restart ECS Service**
+   ```bash
+   aws ecs update-service \
+     --cluster production-garmin-exporter-cluster \
+     --service production-garmin-data-exporter \
+     --force-new-deployment
+   ```
+
+5. **Verify Deployment**
+   ```bash
+   aws logs tail /ecs/garmin-data-exporter --follow
+   ```
+
+**See [AWS_DEPLOYMENT_GUIDE.md](AWS_DEPLOYMENT_GUIDE.md) for detailed instructions.**
+
+## AWS Services Used
+
+- **Amazon Timestream** - Managed time-series database
+- **Amazon ECS Fargate** - Serverless container orchestration
+- **Amazon Managed Grafana** - Visualization (optional)
+- **AWS Secrets Manager** - Secure credential storage
+- **Amazon EFS** - Persistent token storage
+- **Amazon ECR** - Container registry
+- **Amazon CloudWatch** - Logging and monitoring
+- **VPC** - Network isolation
+
+## Cost Estimate
+
+**Monthly costs:** $34-48 (depending on data volume and Grafana choice)
+
+| Service | Monthly Cost |
+|---------|--------------|
+| Timestream | $15-25 |
+| ECS Fargate | $15-20 |
+| EFS | $0.30 |
+| Secrets Manager | $0.80 |
+| CloudWatch Logs | $2.50 |
+| Managed Grafana (optional) | $9 |
+
+**Zero maintenance overhead** - All services are fully managed by AWS.
+
+## Configuration
+
+Environment variables can be configured in the ECS task definition:
+
+```bash
+# Timestream Configuration
+TIMESTREAM_DATABASE=GarminStats
+TIMESTREAM_TABLE=GarminMetrics
+AWS_REGION=us-east-1
+
+# Application Settings
+LOG_LEVEL=INFO
+UPDATE_INTERVAL_SECONDS=300
+FETCH_SELECTION=daily_avg,sleep,steps,heartrate,stress,breathing,hrv,vo2,activity,race_prediction,body_composition
+
+# Additional optional data types:
+# training_readiness,hill_score,endurance_score,blood_pressure,hydration
+```
 
 ## Monitoring
 
-### Docker Compose
-- Grafana: http://localhost:3000
-- InfluxDB: http://localhost:8086
-
-### AWS
-- CloudWatch Logs: `/ecs/garmin-data-exporter`
-- CloudWatch Dashboard: Available in AWS Console
-- Grafana: Amazon Managed Grafana workspace URL
-
-## Troubleshooting
-
-### Docker Compose
-Check logs:
-```bash
-docker-compose logs -f garmin-data-exporter
-```
-
-### AWS
-Check logs:
+### View Logs
 ```bash
 aws logs tail /ecs/garmin-data-exporter --follow
 ```
 
-See troubleshooting sections in migration guides for detailed help.
+### Query Data
+```bash
+aws timestream-query query \
+  --query-string "SELECT * FROM GarminStats.GarminMetrics WHERE time > ago(24h) LIMIT 10"
+```
 
-## Cost Comparison
-
-| Setup | Monthly Cost | Maintenance |
-|-------|--------------|-------------|
-| **Docker Compose** | $40-45 | 5-10 hrs/month |
-| **AWS (optimized)** | $45-58 | ~30 min/month |
-| **AWS (with NAT)** | $77-90 | ~30 min/month |
-
-**AWS saves 8-9 hours/month in maintenance time!**
-
-See [INFLUXDB_VS_TIMESTREAM.md](INFLUXDB_VS_TIMESTREAM.md) for detailed comparison.
+### CloudWatch Dashboard
+Available in AWS Console → CloudWatch → Dashboards
 
 ## Security
 
-### Docker Compose
-- Container isolation
-- Password authentication
-- Network-level security
+✅ VPC isolation with private subnets  
+✅ IAM roles with least-privilege access  
+✅ Encryption at rest (EFS, Timestream)  
+✅ Encryption in transit (TLS 1.2+)  
+✅ AWS Secrets Manager for credentials  
+✅ CloudWatch audit logging  
+✅ Multi-AZ deployment for high availability  
 
-### AWS
-- VPC isolation
-- IAM authentication
-- Encryption at rest and in transit
-- AWS Secrets Manager
-- CloudWatch audit logging
-- Multi-AZ deployment
+## Cleanup
 
-## Data Export
-
-Export your data to CSV:
+To remove all AWS resources:
 
 ```bash
-# Docker Compose
-docker-compose exec garmin-data-exporter python influxdb_exporter.py \
-  --last-n-days 90
-
-# AWS (after deploying)
-# Data export available through Timestream console or AWS CLI
+cd aws-infrastructure/scripts
+chmod +x cleanup.sh
+./cleanup.sh
 ```
 
-## Migration from Docker to AWS
+## Documentation
 
-1. **Export existing data** (optional)
-2. **Deploy AWS infrastructure** (`./deploy.sh`)
-3. **Import data to Timestream** (optional)
-4. **Verify data flow**
-5. **Decommission old infrastructure**
+- **[AWS_DEPLOYMENT_GUIDE.md](AWS_DEPLOYMENT_GUIDE.md)** - Complete deployment guide
+- **[aws-infrastructure/README.md](aws-infrastructure/README.md)** - Infrastructure details
+- **CloudFormation templates** in `aws-infrastructure/cloudformation/`
 
-See [AWS_MIGRATION_GUIDE.md](AWS_MIGRATION_GUIDE.md) for step-by-step instructions.
+## Troubleshooting
+
+### ECS Task Not Starting
+```bash
+# Check logs
+aws logs tail /ecs/garmin-data-exporter --follow
+
+# Common issues:
+# 1. Secrets not configured
+# 2. Invalid Garmin credentials
+# 3. Insufficient IAM permissions
+```
+
+### No Data in Timestream
+```bash
+# Verify database exists
+aws timestream-write describe-database --database-name GarminStats
+
+# Check service is running
+aws ecs describe-services \
+  --cluster production-garmin-exporter-cluster \
+  --services production-garmin-data-exporter
+```
 
 ## Contributing
 
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-## Support
-
-- **Documentation**: Check the migration guides
-- **Issues**: Open a GitHub issue
-- **AWS Support**: See CloudWatch Logs and troubleshooting guides
+Contributions welcome! Please open an issue or pull request.
 
 ## Credits
 
 Original project by Arpan Ghosh  
-AWS migration added with complete infrastructure automation
+AWS Timestream integration for serverless deployment
 
 ## License
 
@@ -264,15 +224,4 @@ AWS migration added with complete infrastructure automation
 
 ---
 
-## Next Steps
-
-### For New Users
-1. **Quick Start**: [QUICKSTART_AWS.md](QUICKSTART_AWS.md) - Deploy to AWS in 30 minutes
-2. **Or** use Docker Compose for local testing
-
-### For Existing Users
-1. **Migrate to AWS**: [AWS_MIGRATION_GUIDE.md](AWS_MIGRATION_GUIDE.md)
-2. **Compare options**: [INFLUXDB_VS_TIMESTREAM.md](INFLUXDB_VS_TIMESTREAM.md)
-3. **Get support**: Check troubleshooting guides
-
-**Ready to deploy? Start with [AWS_MIGRATION_INDEX.md](AWS_MIGRATION_INDEX.md)!**
+**Ready to deploy?** See [AWS_DEPLOYMENT_GUIDE.md](AWS_DEPLOYMENT_GUIDE.md) for step-by-step instructions!

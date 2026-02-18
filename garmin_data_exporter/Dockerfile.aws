@@ -9,11 +9,10 @@ COPY . /app/
 
 WORKDIR /app
 
-# Install AWS-compatible requirements
+# Install dependencies (use requirements-aws.txt for AWS deployment)
 RUN pip install --no-cache-dir -r requirements-aws.txt
 
 RUN groupadd --gid 1000 appuser && useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Use Timestream-compatible wrapper script
 CMD ["python", "garmin_fetch.py"]
