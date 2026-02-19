@@ -84,21 +84,14 @@ deploy_stack \
     --parameters "ParameterKey=DatabaseName,ParameterValue=GarminStats" \
                  "ParameterKey=TableName,ParameterValue=GarminMetrics"
 
-# Step 3: Deploy EFS for Lambda Token Storage
-echo -e "\n${GREEN}Step 3: Deploying EFS for Token Storage${NC}"
-deploy_stack \
-    "garmin-exporter-efs" \
-    "aws-infrastructure/cloudformation/03-efs.yaml" \
-    --parameters "ParameterKey=Environment,ParameterValue=$ENVIRONMENT"
-
-# Step 4: Deploy Managed Grafana (Optional)
-echo -e "\n${YELLOW}Step 4: Deploy Managed Grafana (Optional)${NC}"
+# Step 3: Deploy Managed Grafana (Optional)
+echo -e "\n${YELLOW}Step 3: Deploy Managed Grafana (Optional)${NC}"
 read -p "Do you want to deploy Amazon Managed Grafana? (y/n) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     deploy_stack \
         "garmin-exporter-grafana" \
-        "aws-infrastructure/cloudformation/06-grafana.yaml" \
+        "aws-infrastructure/cloudformation/03-grafana.yaml" \
         --parameters "ParameterKey=WorkspaceName,ParameterValue=garmin-data-exporter"
     
     # Get Grafana endpoint
@@ -119,7 +112,6 @@ echo "Resources deployed:"
 echo "  - VPC with private subnets and VPC endpoints"
 echo "  - Timestream Database: GarminStats"
 echo "  - Timestream Table: GarminMetrics"
-echo "  - EFS for Lambda token storage"
 if [ -n "$GRAFANA_ENDPOINT" ]; then
     echo "  - Amazon Managed Grafana: $GRAFANA_ENDPOINT"
 fi

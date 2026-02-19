@@ -29,23 +29,24 @@ Export your Garmin Connect health and fitness data to Amazon Timestream and visu
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                    AWS Cloud                          │
-│                                                       │
-│  ┌─────────────┐   ┌──────────────┐   ┌───────────┐ │
-│  │ EventBridge │──▶│    Lambda    │──▶│Timestream │ │
-│  │ (Schedule)  │   │    Garmin    │   │(Database) │ │
-│  │ Every 5min  │   │   Exporter   │   └───────────┘ │
-│  └─────────────┘   └──────┬───────┘                 │
-│                            │                          │
-│                            ▼                          │
-│                      ┌───────────┐                   │
-│                      │    EFS    │                   │
-│                      │  Tokens   │                   │
-│                      └───────────┘                   │
-│                                                       │
-│  Optional: Amazon Managed Grafana for visualization │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                    AWS Cloud                              │
+│                                                           │
+│  ┌─────────────┐   ┌──────────────┐   ┌────────────┐    │
+│  │ EventBridge │──▶│    Lambda    │──▶│ Timestream │    │
+│  │ (Schedule)  │   │    Garmin    │   │ (Database) │    │
+│  │ Every 5min  │   │   Exporter   │   └────────────┘    │
+│  └─────────────┘   └──────┬───────┘                      │
+│                            │                              │
+│                            ▼                              │
+│                   ┌─────────────────┐                    │
+│                   │ Secrets Manager │                    │
+│                   │  OAuth Tokens   │                    │
+│                   │  + Credentials  │                    │
+│                   └─────────────────┘                    │
+│                                                           │
+│  Optional: Amazon Managed Grafana for visualization     │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ## Quick Start
@@ -102,23 +103,19 @@ Export your Garmin Connect health and fitness data to Amazon Timestream and visu
 
 - **AWS Lambda** - Serverless compute (runs every 5 minutes)
 - **Amazon Timestream** - Managed time-series database
-- **Amazon Managed Grafana** - Visualization (optional)
-- **AWS Secrets Manager** - Secure credential storage
-- **Amazon EFS** - Persistent token storage
+- **AWS Secrets Manager** - Secure credential and OAuth token storage
 - **Amazon CloudWatch** - Logging and monitoring
 - **Amazon EventBridge** - Scheduled Lambda execution
-- **Amazon CloudWatch** - Logging and monitoring
-- **VPC** - Network isolation
+- **Amazon Managed Grafana** - Visualization (optional)
 
 ## Cost Estimate
 
-**Monthly costs:** $20-35 (significantly lower with Lambda)
+**Monthly costs:** $18-32 (fully serverless)
 
 | Service | Monthly Cost |
 |---------|--------------|
-| Lambda (288 invocations/day) | $2-3 |
+| Lambda (288 invocations/day) | $0.50-1 |
 | Timestream | $15-25 |
-| EFS | $0.30 |
 | Secrets Manager | $0.80 |
 | CloudWatch Logs | $2.50 |
 | Managed Grafana (optional) | $9 |

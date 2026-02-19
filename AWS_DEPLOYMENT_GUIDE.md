@@ -5,45 +5,46 @@ Deploy Garmin Data Exporter to AWS using serverless Lambda architecture.
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                    AWS Cloud                          │
-│                                                       │
-│  ┌─────────────┐   ┌──────────────┐   ┌───────────┐ │
-│  │ EventBridge │──▶│    Lambda    │──▶│Timestream │ │
-│  │ (Schedule)  │   │    Garmin    │   │(Database) │ │
-│  │ Every 5min  │   │   Exporter   │   └───────────┘ │
-│  └─────────────┘   └──────┬───────┘                 │
-│                            │                          │
-│                            ▼                          │
-│                      ┌───────────┐                   │
-│                      │    EFS    │                   │
-│                      │  Tokens   │                   │
-│                      └───────────┘                   │
-│                                                       │
-│  Optional: Amazon Managed Grafana for visualization │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                    AWS Cloud                              │
+│                                                           │
+│  ┌─────────────┐   ┌──────────────┐   ┌────────────┐    │
+│  │ EventBridge │──▶│    Lambda    │──▶│ Timestream │    │
+│  │ (Schedule)  │   │    Garmin    │   │ (Database) │    │
+│  │ Every 5min  │   │   Exporter   │   └────────────┘    │
+│  └─────────────┘   └──────┬───────┘                      │
+│                            │                              │
+│                            ▼                              │
+│                   ┌─────────────────┐                    │
+│                   │ Secrets Manager │                    │
+│                   │  OAuth Tokens   │                    │
+│                   │  + Credentials  │                    │
+│                   └─────────────────┘                    │
+│                                                           │
+│  Optional: Amazon Managed Grafana for visualization     │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ## Why Lambda?
 
-- **Cost**: ~$2-5/month vs $15-20 for always-on alternatives
-- **Serverless**: Zero infrastructure management
+- **Cost**: ~$0.50-1/month for compute (vs $15-20 for always-on alternatives)
+- **Serverless**: Zero infrastructure management, no VPC needed
 - **Scheduled**: EventBridge triggers every 5 minutes
 - **Sufficient**: Data fetching takes 1-5 minutes (well under 15-min limit)
-- **Scalable**: Automatic scaling if needed
+- **Secure**: OAuth tokens stored in Secrets Manager instead of filesystem
 
 ## Prerequisites
 
 - AWS Account with admin permissions
 - AWS CLI v2 configured (`aws configure`)
-- Docker installed
+- Python 3.11+ installed
 - Garmin Connect credentials
 
 ## Deployment Steps
 
 ### 1. Deploy Base Infrastructure
 
-First, deploy VPC, Timestream, and EFS:
+First, deploy Timestream database:
 
 ```bash
 cd aws-infrastructure/scripts
@@ -52,9 +53,7 @@ chmod +x deploy.sh
 ```
 
 This creates:
-- VPC with private subnets and VPC endpoints
 - Timestream database and table
-- EFS for Garmin token storage
 - (Optional) Amazon Managed Grafana
 
 ### 2. Configure Secrets
@@ -65,7 +64,7 @@ Encode your Garmin password and create secret:
 # Encode password
 echo -n "your_password" | base64
 
-# Create secret
+# Create secret for Garmin credentials
 aws secretsmanager create-secret \
   --name garmin-exporter/garmin-credentials \
   --secret-string '{
@@ -73,6 +72,8 @@ aws secretsmanager create-secret \
     "GARMINCONNECT_BASE64_PASSWORD": "your_base64_encoded_password"
   }'
 ```
+
+**Note**: OAuth tokens will be automatically stored in a separate secret (`garmin-exporter/oauth-tokens`) by the Lambda function after first login.
 
 ### 3. Deploy Lambda Function
 
@@ -188,13 +189,14 @@ aws timestream-query query \
 
 | Service | Cost |
 |---------|------|
-| Lambda (288 invocations/day) | $2-3 |
+| Lambda (288 invocations/day, 2min avg) | $0.50-1 |
 | Timestream (10GB, 1M writes/day) | $15-25 |
-| EFS (1GB) | $0.30 |
-| Secrets Manager | $0.80 |
+| Secrets Manager (2 secrets) | $0.80 |
 | CloudWatch Logs (5GB) | $2.50 |
 | Amazon Managed Grafana (optional) | $9 |
-| **Total** | **$20-40/month** |
+| **Total** | **$18-38/month** |
+
+**Savings vs EFS version:** ~$2-3/month (no EFS, no VPC costs)
 
 ### Cost Optimization
 

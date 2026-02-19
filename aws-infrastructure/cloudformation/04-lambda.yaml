@@ -36,7 +36,6 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
         - PolicyName: TimestreamAccess
           PolicyDocument:
@@ -61,19 +60,11 @@ Resources:
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
+                  - secretsmanager:CreateSecret
+                  - secretsmanager:UpdateSecret
+                  - secretsmanager:PutSecretValue
                 Resource:
                   - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:garmin-exporter/*'
-        - PolicyName: EFSAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - elasticfilesystem:ClientMount
-                  - elasticfilesystem:ClientWrite
-                  - elasticfilesystem:DescribeMountTargets
-                Resource:
-                  - Fn::ImportValue: !Sub '${Environment}-EFSAccessPointArn'
 
   # Lambda Function
   GarminExporterFunction:
@@ -96,18 +87,8 @@ Resources:
             Fn::ImportValue: TimestreamTableName
           AWS_REGION: !Ref AWS::Region
           LOG_LEVEL: INFO
-          TOKEN_DIR: /mnt/efs/garmin-tokens
+          OAUTH_TOKEN_SECRET_NAME: garmin-exporter/oauth-tokens
           FETCH_SELECTION: daily_avg,sleep,steps,heartrate,stress,breathing,hrv,vo2,activity,race_prediction,body_composition
-      VpcConfig:
-        SecurityGroupIds:
-          - Fn::ImportValue: !Sub '${Environment}-AppSecurityGroup'
-        SubnetIds:
-          - Fn::ImportValue: !Sub '${Environment}-PrivateSubnet1'
-          - Fn::ImportValue: !Sub '${Environment}-PrivateSubnet2'
-      FileSystemConfigs:
-        - Arn:
-            Fn::ImportValue: !Sub '${Environment}-EFSAccessPointArn'
-          LocalMountPath: /mnt/efs
       Tags:
         - Key: Name
           Value: !Sub '${Environment}-garmin-exporter-lambda'

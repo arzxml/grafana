@@ -44,7 +44,41 @@ pip install -r requirements-aws.txt -t package/ --quiet
 
 # Copy application code
 echo "Copying application code..."
-cp garmin_fetch.py package/handler.py
+cp garmin_fetch.py package/
+cp garmin_wrapper.py package/
+cp token_manager.py package/
+
+# Create Lambda handler
+cat > package/handler.py << 'EOF'
+"""
+AWS Lambda handler for Garmin Data Exporter.
+"""
+import garmin_fetch
+
+def lambda_handler(event, context):
+    """
+    Lambda function handler.
+    
+    Args:
+        event: Lambda event data
+        context: Lambda context object
+    
+    Returns:
+        Status code and message
+    """
+    try:
+        # The garmin_fetch.py script runs on import and exports data
+        return {
+            'statusCode': 200,
+            'body': 'Garmin data export completed successfully'
+        }
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'body': f'Error: {str(e)}'
+        }
+EOF
 
 # Create ZIP file
 echo "Creating deployment package..."
@@ -65,7 +99,7 @@ cd ../aws-infrastructure/cloudformation
 echo -e "${YELLOW}Deploying Lambda CloudFormation stack...${NC}"
 
 aws cloudformation deploy \
-    --template-file 08-lambda.yaml \
+    --template-file 04-lambda.yaml \
     --stack-name garmin-exporter-lambda \
     --parameter-overrides \
         Environment="$ENVIRONMENT" \

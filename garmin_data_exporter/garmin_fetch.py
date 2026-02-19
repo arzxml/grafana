@@ -12,6 +12,7 @@ from garminconnect import (
     GarminConnectConnectionError,
     GarminConnectTooManyRequestsError,
 )
+from garmin_wrapper import GarminWithSecretsManager
 garmin_obj = None
 banner_text = """
 
@@ -36,7 +37,7 @@ TIMESTREAM_TABLE = os.getenv("TIMESTREAM_TABLE", 'GarminMetrics')
 AWS_REGION = os.getenv("AWS_REGION", 'us-east-1')
 
 # Garmin Configuration
-TOKEN_DIR = os.getenv("TOKEN_DIR", "~/.garminconnect")
+OAUTH_TOKEN_SECRET_NAME = os.getenv("OAUTH_TOKEN_SECRET_NAME", "garmin-exporter/oauth-tokens")
 GARMINCONNECT_EMAIL = os.environ.get("GARMINCONNECT_EMAIL", None)
 GARMINCONNECT_PASSWORD = base64.b64decode(os.getenv("GARMINCONNECT_BASE64_PASSWORD")).decode("utf-8") if os.getenv("GARMINCONNECT_BASE64_PASSWORD") != None else None
 GARMINCONNECT_IS_CN = True if os.getenv("GARMINCONNECT_IS_CN") in ['True', 'true', 'TRUE','t', 'T', 'yes', 'Yes', 'YES', '1'] else False
@@ -112,30 +113,43 @@ def iter_days(start_date: str, end_date: str):
 # %%
 def garmin_login():
     try:
-        logging.info(f"Trying to login to Garmin Connect using token data from directory '{TOKEN_DIR}'...")
-        garmin = Garmin()
-        garmin.login(TOKEN_DIR)
-        logging.info("login to Garmin Connect successful using stored session tokens.")
+        logging.info(f"Trying to login to Garmin Connect using OAuth tokens from Secrets Manager...")
+        garmin = GarminWithSecretsManager(
+            secrets_manager_token_name=OAUTH_TOKEN_SECRET_NAME,
+            aws_region=AWS_REGION
+        )
+        garmin.login()
+        logging.info("Login to Garmin Connect successful using stored OAuth tokens.")
 
     except (FileNotFoundError, GarthHTTPError, GarminConnectAuthenticationError):
         logging.warning("Session is expired or login information not present/incorrect. You'll need to log in again...login with your Garmin Connect credentials to generate them.")
         try:
             user_email = GARMINCONNECT_EMAIL or input("Enter Garminconnect Login e-mail: ")
             user_password = GARMINCONNECT_PASSWORD or input("Enter Garminconnect password (characters will be visible): ")
-            garmin = Garmin(
-                email=user_email, password=user_password, is_cn=GARMINCONNECT_IS_CN, return_on_mfa=True
+            garmin = GarminWithSecretsManager(
+                email=user_email, 
+                password=user_password, 
+                is_cn=GARMINCONNECT_IS_CN, 
+                return_on_mfa=True,
+                secrets_manager_token_name=OAUTH_TOKEN_SECRET_NAME,
+                aws_region=AWS_REGION
             )
             result1, result2 = garmin.login()
             if result1 == "needs_mfa":  # MFA is required
                 mfa_code = input("MFA one-time code (via email or SMS): ")
                 garmin.resume_login(result2, mfa_code)
 
-            garmin.garth.dump(TOKEN_DIR)
-            logging.info(f"Oauth tokens stored in '{TOKEN_DIR}' directory for future use")
+            garmin.save_tokens()
+            logging.info(f"OAuth tokens stored in Secrets Manager for future use")
 
-            garmin.login(TOKEN_DIR)
-            logging.info("login to Garmin Connect successful using stored session tokens. Please restart the script. Saved logins will be used automatically")
-            exit() # terminating script
+            # Try logging in again with saved tokens to verify
+            garmin_verified = GarminWithSecretsManager(
+                secrets_manager_token_name=OAUTH_TOKEN_SECRET_NAME,
+                aws_region=AWS_REGION
+            )
+            garmin_verified.login()
+            logging.info("Login to Garmin Connect successful using stored OAuth tokens.")
+            return garmin_verified
 
         except (
             FileNotFoundError,

@@ -51,7 +51,6 @@ delete_stack() {
 echo -e "\n${GREEN}Deleting CloudFormation Stacks${NC}"
 delete_stack "garmin-exporter-grafana"
 delete_stack "garmin-exporter-lambda"
-delete_stack "garmin-exporter-efs"
 delete_stack "garmin-exporter-timestream"
 delete_stack "garmin-exporter-vpc"
 
@@ -59,7 +58,7 @@ delete_stack "garmin-exporter-vpc"
 echo -e "\n${GREEN}Deleting Secrets${NC}"
 SECRETS=(
     "garmin-exporter/garmin-credentials"
-    "garmin-exporter/timestream-config"
+    "garmin-exporter/oauth-tokens"
 )
 
 for secret in "${SECRETS[@]}"; do

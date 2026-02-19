@@ -314,21 +314,6 @@ Resources:
         - Key: Name
           Value: !Sub '${Environment}-app-sg'
 
-  EFSSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security group for EFS
-      VpcId: !Ref VPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 2049
-          ToPort: 2049
-          SourceSecurityGroupId: !Ref AppSecurityGroup
-          Description: NFS from Lambda/Application
-      Tags:
-        - Key: Name
-          Value: !Sub '${Environment}-efs-sg'
-
 Outputs:
   VpcId:
     Description: VPC ID
@@ -353,9 +338,3 @@ Outputs:
     Value: !Ref AppSecurityGroup
     Export:
       Name: !Sub '${Environment}-AppSecurityGroup'
-
-  EFSSecurityGroup:
-    Description: Security Group for EFS
-    Value: !Ref EFSSecurityGroup
-    Export:
-      Name: !Sub '${Environment}-EFSSecurityGroup'
