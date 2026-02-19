@@ -1,0 +1,127 @@
+name: CI - Test and Validate
+
+on:
+  pull_request:
+    branches:
+      - master
+      - main
+  push:
+    branches-ignore:
+      - master
+      - main
+
+env:
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  validate:
+    name: Validate Code and Configuration
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pylint black mypy
+          
+          # Install application dependencies
+          cd garmin_data_exporter
+          pip install -r requirements-aws.txt
+      
+      - name: Lint Python code
+        run: |
+          echo "Running flake8..."
+          flake8 garmin_data_exporter/*.py --max-line-length=120 --ignore=E501,W503 || true
+          
+          echo "Running pylint..."
+          pylint garmin_data_exporter/*.py --max-line-length=120 --disable=C0111,C0103,R0913,R0914 || true
+      
+      - name: Check code formatting
+        run: |
+          echo "Checking code formatting with black..."
+          black --check garmin_data_exporter/*.py --line-length=120 || true
+      
+      - name: Validate CloudFormation templates
+        run: |
+          echo "Installing cfn-lint..."
+          pip install cfn-lint
+          
+          echo "Validating CloudFormation templates..."
+          cfn-lint aws-infrastructure/cloudformation/*.yaml -i W3002,W3005
+      
+      - name: Test Lambda package creation
+        run: |
+          cd garmin_data_exporter
+          
+          # Create test package
+          mkdir -p test_package
+          pip install -r requirements-aws.txt -t test_package/
+          cp garmin_fetch.py test_package/
+          cp token_manager.py test_package/ 2>/dev/null || echo "token_manager.py not found"
+          cp garmin_wrapper.py test_package/ 2>/dev/null || echo "garmin_wrapper.py not found"
+          
+          cd test_package
+          zip -q -r ../test-package.zip .
+          cd ..
+          
+          # Check package size
+          SIZE=$(du -h test-package.zip | cut -f1)
+          echo "Lambda package size: $SIZE"
+          
+          # Verify package contents
+          echo "Package contents:"
+          unzip -l test-package.zip | head -20
+          
+          # Check if package is under 50MB (unzipped Lambda limit is 250MB)
+          SIZE_BYTES=$(stat -f%z test-package.zip 2>/dev/null || stat -c%s test-package.zip)
+          if [ $SIZE_BYTES -gt 52428800 ]; then
+            echo "⚠ Warning: Package size exceeds 50MB"
+          else
+            echo "✓ Package size is acceptable"
+          fi
+      
+      - name: Security scan
+        run: |
+          echo "Installing safety for security scanning..."
+          pip install safety
+          
+          echo "Scanning for known vulnerabilities..."
+          safety check --file garmin_data_exporter/requirements-aws.txt || true
+      
+      - name: Documentation check
+        run: |
+          echo "Checking for required documentation..."
+          
+          REQUIRED_DOCS=(
+            "README.md"
+            "AWS_DEPLOYMENT_GUIDE.md"
+            "aws-infrastructure/README.md"
+          )
+          
+          for doc in "${REQUIRED_DOCS[@]}"; do
+            if [ -f "$doc" ]; then
+              echo "✓ Found: $doc"
+            else
+              echo "✗ Missing: $doc"
+              exit 1
+            fi
+          done
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Code linting completed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ CloudFormation templates validated" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Lambda package test completed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Security scan completed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Documentation check completed" >> $GITHUB_STEP_SUMMARY

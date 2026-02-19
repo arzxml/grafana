@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Amazon Managed Grafana Workspace for Garmin Data Visualization'
+
+Parameters:
+  WorkspaceName:
+    Type: String
+    Default: garmin-data-exporter
+    Description: Name of the Grafana workspace
+
+Resources:
+  # IAM Role for Grafana to access Timestream
+  GrafanaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AmazonGrafana-GarminExporter-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: grafana.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonTimestreamReadOnlyAccess
+      Policies:
+        - PolicyName: TimestreamQueryAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - timestream:DescribeEndpoints
+                  - timestream:SelectValues
+                  - timestream:Select
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - timestream:DescribeDatabase
+                  - timestream:DescribeTable
+                  - timestream:ListMeasures
+                Resource:
+                  - Fn::ImportValue: TimestreamDatabaseArn
+      Tags:
+        - Key: Name
+          Value: AmazonGrafana-GarminExporter-Role
+
+  # Managed Grafana Workspace
+  GrafanaWorkspace:
+    Type: AWS::Grafana::Workspace
+    Properties:
+      Name: !Ref WorkspaceName
+      Description: Grafana workspace for Garmin data visualization
+      AccountAccessType: CURRENT_ACCOUNT
+      AuthenticationProviders:
+        - AWS_SSO
+      PermissionType: SERVICE_MANAGED
+      DataSources:
+        - TIMESTREAM
+        - CLOUDWATCH
+      NotificationDestinations:
+        - SNS
+      OrganizationRoleName: ADMIN
+      RoleArn: !GetAtt GrafanaRole.Arn
+      StackSetName: !Sub '${AWS::StackName}-GrafanaStackSet'
+
+Outputs:
+  WorkspaceId:
+    Description: Grafana Workspace ID
+    Value: !Ref GrafanaWorkspace
+    Export:
+      Name: GrafanaWorkspaceId
+
+  WorkspaceEndpoint:
+    Description: Grafana Workspace Endpoint
+    Value: !GetAtt GrafanaWorkspace.Endpoint
+
+  WorkspaceStatus:
+    Description: Grafana Workspace Status
+    Value: !GetAtt GrafanaWorkspace.Status

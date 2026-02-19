@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Amazon Timestream Database for Garmin Data Exporter'
+
+Parameters:
+  DatabaseName:
+    Type: String
+    Default: GarminStats
+    Description: Timestream database name
+
+  TableName:
+    Type: String
+    Default: GarminMetrics
+    Description: Timestream table name
+
+  MemoryRetentionHours:
+    Type: Number
+    Default: 24
+    Description: Memory store retention period in hours
+
+  MagneticRetentionDays:
+    Type: Number
+    Default: 365
+    Description: Magnetic store retention period in days
+
+Resources:
+  TimestreamDatabase:
+    Type: AWS::Timestream::Database
+    Properties:
+      DatabaseName: !Ref DatabaseName
+      Tags:
+        - Key: Name
+          Value: !Ref DatabaseName
+        - Key: Application
+          Value: GarminDataExporter
+
+  TimestreamTable:
+    Type: AWS::Timestream::Table
+    Properties:
+      DatabaseName: !Ref TimestreamDatabase
+      TableName: !Ref TableName
+      RetentionProperties:
+        MemoryStoreRetentionPeriodInHours: !Ref MemoryRetentionHours
+        MagneticStoreRetentionPeriodInDays: !Ref MagneticRetentionDays
+      MagneticStoreWriteProperties:
+        EnableMagneticStoreWrites: true
+      Tags:
+        - Key: Name
+          Value: !Ref TableName
+        - Key: Application
+          Value: GarminDataExporter
+
+Outputs:
+  DatabaseName:
+    Description: Timestream Database Name
+    Value: !Ref TimestreamDatabase
+    Export:
+      Name: TimestreamDatabaseName
+
+  TableName:
+    Description: Timestream Table Name
+    Value: !Ref TimestreamTable
+    Export:
+      Name: TimestreamTableName
+
+  DatabaseArn:
+    Description: Timestream Database ARN
+    Value: !GetAtt TimestreamDatabase.Arn
+    Export:
+      Name: TimestreamDatabaseArn

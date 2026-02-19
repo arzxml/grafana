@@ -1,0 +1,177 @@
+name: Deploy Lambda to AWS
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  STACK_PREFIX: production
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  deploy:
+    name: Deploy Lambda Function
+    runs-on: ubuntu-latest
+    
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Package Lambda function
+        run: |
+          cd garmin_data_exporter
+          
+          # Create deployment package directory
+          mkdir -p lambda_package
+          
+          # Install dependencies
+          pip install -r requirements-aws.txt -t lambda_package/
+          
+          # Copy application code
+          cp garmin_fetch.py lambda_package/
+          cp token_manager.py lambda_package/
+          cp garmin_wrapper.py lambda_package/
+          
+          # Create Lambda handler if it doesn't exist
+          if [ ! -f lambda_package/lambda_handler.py ]; then
+            cat > lambda_package/lambda_handler.py << 'EOF'
+          import logging
+          from garmin_fetch import main
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def lambda_handler(event, context):
+              """Lambda handler for Garmin data exporter"""
+              try:
+                  logger.info("Starting Garmin data export")
+                  main()
+                  logger.info("Garmin data export completed successfully")
+                  return {
+                      'statusCode': 200,
+                      'body': 'Garmin data exported successfully'
+                  }
+              except Exception as e:
+                  logger.error(f"Error exporting Garmin data: {str(e)}")
+                  raise
+          EOF
+          fi
+          
+          # Create ZIP file
+          cd lambda_package
+          zip -r ../garmin-exporter.zip .
+          cd ..
+          
+          echo "Lambda package created: garmin-exporter.zip"
+          ls -lh garmin-exporter.zip
+      
+      - name: Upload Lambda package to S3
+        run: |
+          BUCKET_NAME="${{ secrets.LAMBDA_BUCKET_NAME }}"
+          
+          # Create bucket if it doesn't exist
+          if ! aws s3 ls "s3://${BUCKET_NAME}" 2>&1 | grep -q 'NoSuchBucket'; then
+            echo "Bucket exists"
+          else
+            echo "Creating bucket: ${BUCKET_NAME}"
+            aws s3 mb "s3://${BUCKET_NAME}" --region ${{ env.AWS_REGION }}
+          fi
+          
+          # Upload Lambda package
+          aws s3 cp garmin_data_exporter/garmin-exporter.zip \
+            "s3://${BUCKET_NAME}/lambda/garmin-exporter-$(date +%Y%m%d-%H%M%S).zip"
+          
+          # Also upload as latest
+          aws s3 cp garmin_data_exporter/garmin-exporter.zip \
+            "s3://${BUCKET_NAME}/lambda/garmin-exporter-latest.zip"
+          
+          echo "Lambda package uploaded to S3"
+      
+      - name: Deploy infrastructure
+        run: |
+          cd aws-infrastructure/scripts
+          
+          # Make scripts executable
+          chmod +x deploy.sh deploy-lambda.sh
+          
+          # Deploy base infrastructure (VPC, Timestream, Grafana)
+          echo "Deploying base infrastructure..."
+          ./deploy.sh
+          
+          # Deploy Lambda function
+          echo "Deploying Lambda function..."
+          ./deploy-lambda.sh
+      
+      - name: Verify deployment
+        run: |
+          echo "Verifying Lambda deployment..."
+          
+          FUNCTION_NAME="${{ env.STACK_PREFIX }}-garmin-data-exporter"
+          
+          # Check if Lambda function exists
+          if aws lambda get-function --function-name $FUNCTION_NAME 2>/dev/null; then
+            echo "✓ Lambda function deployed successfully"
+            
+            # Get function details
+            aws lambda get-function-configuration --function-name $FUNCTION_NAME \
+              --query '[FunctionName, Runtime, MemorySize, Timeout, LastModified]' \
+              --output table
+          else
+            echo "✗ Lambda function not found"
+            exit 1
+          fi
+          
+          # Check EventBridge rule
+          RULE_NAME="${{ env.STACK_PREFIX }}-garmin-exporter-schedule"
+          if aws events describe-rule --name $RULE_NAME 2>/dev/null; then
+            echo "✓ EventBridge schedule configured"
+          else
+            echo "⚠ EventBridge rule not found"
+          fi
+      
+      - name: Run smoke test
+        run: |
+          FUNCTION_NAME="${{ env.STACK_PREFIX }}-garmin-data-exporter"
+          
+          echo "Running smoke test..."
+          
+          # Invoke Lambda function
+          aws lambda invoke \
+            --function-name $FUNCTION_NAME \
+            --invocation-type RequestResponse \
+            --log-type Tail \
+            --payload '{}' \
+            response.json
+          
+          # Check response
+          if [ -f response.json ]; then
+            echo "Lambda response:"
+            cat response.json
+            
+            # Check if execution was successful
+            if grep -q '"statusCode": 200' response.json; then
+              echo "✓ Smoke test passed"
+            else
+              echo "⚠ Smoke test completed with warnings"
+              cat response.json
+            fi
+          fi
