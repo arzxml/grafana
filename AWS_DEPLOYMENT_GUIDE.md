@@ -1,26 +1,9 @@
 # AWS Deployment Guide
 
-Deploy Garmin Data Exporter to AWS using managed services.
-
-## Architecture Options
-
-### Option 1: Lambda (Recommended) 💰
-- **Cost**: ~$2-5/month
-- **Best for**: Periodic data fetching (every 5 minutes)
-- **Pros**: Lowest cost, zero management, automatic scaling
-- **Cons**: 15-minute execution limit (typically takes 1-5 min)
-
-### Option 2: ECS Fargate
-- **Cost**: ~$15-20/month
-- **Best for**: Continuous operation, complex workflows
-- **Pros**: No time limits, full control
-- **Cons**: Higher cost, more complex
-
-This guide covers **both options**. Lambda is recommended for most users.
+Deploy Garmin Data Exporter to AWS using serverless Lambda architecture.
 
 ## Architecture
 
-### Lambda Architecture (Recommended)
 ```
 ┌──────────────────────────────────────────────────────┐
 │                    AWS Cloud                          │
@@ -36,27 +19,18 @@ This guide covers **both options**. Lambda is recommended for most users.
 │                      │    EFS    │                   │
 │                      │  Tokens   │                   │
 │                      └───────────┘                   │
+│                                                       │
+│  Optional: Amazon Managed Grafana for visualization │
 └──────────────────────────────────────────────────────┘
 ```
 
-### ECS Fargate Architecture (Alternative)
-```
-┌──────────────────────────────────────────────────────┐
-│                    AWS Cloud                          │
-│                                                       │
-│  ┌─────────────┐   ┌──────────────┐   ┌───────────┐ │
-│  │ ECS Fargate │──▶│  Timestream  │──▶│  Managed  │ │
-│  │   Garmin    │   │  (Database)  │   │  Grafana  │ │
-│  │  Exporter   │   └──────────────┘   └───────────┘ │
-│  └─────────────┘                                     │
-│        │                                             │
-│        ▼                                             │
-│  ┌───────────┐     ┌──────────────┐                 │
-│  │    EFS    │     │   Secrets    │                 │
-│  │  Tokens   │     │   Manager    │                 │
-│  └───────────┘     └──────────────┘                 │
-└──────────────────────────────────────────────────────┘
-```
+## Why Lambda?
+
+- **Cost**: ~$2-5/month vs $15-20 for always-on alternatives
+- **Serverless**: Zero infrastructure management
+- **Scheduled**: EventBridge triggers every 5 minutes
+- **Sufficient**: Data fetching takes 1-5 minutes (well under 15-min limit)
+- **Scalable**: Automatic scaling if needed
 
 ## Prerequisites
 
@@ -65,11 +39,9 @@ This guide covers **both options**. Lambda is recommended for most users.
 - Docker installed
 - Garmin Connect credentials
 
-## Deployment Options
+## Deployment Steps
 
-### Option A: Lambda Deployment (Recommended)
-
-#### 1. Deploy Base Infrastructure
+### 1. Deploy Base Infrastructure
 
 First, deploy VPC, Timestream, and EFS:
 
@@ -85,7 +57,7 @@ This creates:
 - EFS for Garmin token storage
 - (Optional) Amazon Managed Grafana
 
-#### 2. Configure Secrets
+### 2. Configure Secrets
 
 Encode your Garmin password and create secret:
 
@@ -102,7 +74,7 @@ aws secretsmanager create-secret \
   }'
 ```
 
-#### 3. Deploy Lambda Function
+### 3. Deploy Lambda Function
 
 ```bash
 cd aws-infrastructure/scripts
@@ -116,7 +88,7 @@ This will:
 - Deploy Lambda with EventBridge schedule (every 5 minutes)
 - Configure EFS mount for Garmin tokens
 
-#### 4. Verify Lambda Deployment
+### 4. Verify Lambda Deployment
 
 Test the function:
 ```bash
@@ -129,43 +101,6 @@ Monitor logs:
 aws logs tail /aws/lambda/production-garmin-data-exporter --follow
 ```
 
-**Done!** Lambda will run automatically every 5 minutes.
-
----
-
-### Option B: ECS Fargate Deployment
-
-If you prefer continuous operation or need longer execution times:
-
-#### 1. Deploy Infrastructure (Same as Option A Steps 1-2)
-
-#### 2. Deploy ECS Service
-
-The deploy.sh script also creates ECS infrastructure if you answer 'yes' to the ECS prompts.
-
-#### 3. Restart ECS Service
-    "GARMINCONNECT_EMAIL": "your_email@example.com",
-    "GARMINCONNECT_BASE64_PASSWORD": "your_base64_encoded_password"
-  }'
-```
-
-### 3. Restart ECS Service
-
-Force a new deployment to pick up the secrets:
-```bash
-aws ecs update-service \
-  --cluster production-garmin-exporter-cluster \
-  --service production-garmin-data-exporter \
-  --force-new-deployment
-```
-
-### 4. Verify Deployment
-
-Check the logs:
-```bash
-aws logs tail /ecs/garmin-data-exporter --follow
-```
-
 You should see:
 ```
 Successfully connected to Timestream database: GarminStats
@@ -173,6 +108,8 @@ Successfully verified Timestream table: GarminMetrics
 Trying to login to Garmin Connect...
 Success: wrote X records to Timestream
 ```
+
+**Done!** Lambda will run automatically every 5 minutes.
 
 ## Environment Variables
 
@@ -224,18 +161,19 @@ Install Grafana locally and configure Timestream data source with IAM credential
 ### CloudWatch Logs
 ```bash
 # View recent logs
-aws logs tail /ecs/garmin-data-exporter --follow
+aws logs tail /aws/lambda/production-garmin-data-exporter --follow
 
 # View specific time range
-aws logs tail /ecs/garmin-data-exporter --since 1h
+aws logs tail /aws/lambda/production-garmin-data-exporter --since 1h
 ```
 
-### CloudWatch Dashboard
+### CloudWatch Metrics
 
-View the dashboard at:
-```
-https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=production-garmin-exporter-dashboard
-```
+View Lambda metrics in AWS Console:
+- Invocations
+- Duration
+- Errors
+- Throttles
 
 ### Query Timestream Data
 
@@ -250,13 +188,13 @@ aws timestream-query query \
 
 | Service | Cost |
 |---------|------|
+| Lambda (288 invocations/day) | $2-3 |
 | Timestream (10GB, 1M writes/day) | $15-25 |
-| ECS Fargate (0.25 vCPU, 0.5GB) | $15-20 |
 | EFS (1GB) | $0.30 |
 | Secrets Manager | $0.80 |
 | CloudWatch Logs (5GB) | $2.50 |
 | Amazon Managed Grafana (optional) | $9 |
-| **Total** | **$34-48/month** |
+| **Total** | **$20-40/month** |
 
 ### Cost Optimization
 
@@ -266,17 +204,24 @@ aws timestream-query query \
 
 ## Troubleshooting
 
-### ECS Task Fails to Start
+### Lambda Function Fails
 
 Check logs:
 ```bash
-aws logs tail /ecs/garmin-data-exporter --follow
+aws logs tail /aws/lambda/production-garmin-data-exporter --follow
+```
+
+Test manually:
+```bash
+aws lambda invoke --function-name production-garmin-data-exporter output.json
+cat output.json
 ```
 
 Common issues:
 - Secrets not configured (see step 2)
 - Invalid Garmin credentials
 - Insufficient IAM permissions
+- VPC/EFS mount issues
 
 ### Cannot Write to Timestream
 
@@ -288,18 +233,21 @@ aws timestream-write describe-table \
   --table-name GarminMetrics
 ```
 
-2. Check IAM task role has `timestream:WriteRecords` permission
+2. Check IAM Lambda role has `timestream:WriteRecords` permission
 
 ### No Data in Timestream
 
-1. Check ECS service is running:
+1. Check Lambda is being invoked:
 ```bash
-aws ecs describe-services \
-  --cluster production-garmin-exporter-cluster \
-  --services production-garmin-data-exporter
+aws lambda get-function --function-name production-garmin-data-exporter
 ```
 
-2. Verify Garmin login is working (check logs)
+2. Verify EventBridge schedule:
+```bash
+aws events list-rules --name-prefix production-garmin-exporter-schedule
+```
+
+3. Verify Garmin login is working (check logs)
 
 ## Cleanup
 

@@ -289,15 +289,15 @@ Resources:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
-          SourceSecurityGroupId: !Ref ECSTaskSecurityGroup
+          SourceSecurityGroupId: !Ref AppSecurityGroup
       Tags:
         - Key: Name
           Value: !Sub '${Environment}-vpc-endpoint-sg'
 
-  ECSTaskSecurityGroup:
+  AppSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Security group for ECS tasks
+      GroupDescription: Security group for Lambda/Application
       VpcId: !Ref VPC
       SecurityGroupEgress:
         - IpProtocol: tcp
@@ -312,7 +312,7 @@ Resources:
           Description: HTTP to external services (Garmin API)
       Tags:
         - Key: Name
-          Value: !Sub '${Environment}-ecs-task-sg'
+          Value: !Sub '${Environment}-app-sg'
 
   EFSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -323,8 +323,8 @@ Resources:
         - IpProtocol: tcp
           FromPort: 2049
           ToPort: 2049
-          SourceSecurityGroupId: !Ref ECSTaskSecurityGroup
-          Description: NFS from ECS tasks
+          SourceSecurityGroupId: !Ref AppSecurityGroup
+          Description: NFS from Lambda/Application
       Tags:
         - Key: Name
           Value: !Sub '${Environment}-efs-sg'
@@ -348,11 +348,11 @@ Outputs:
     Export:
       Name: !Sub '${Environment}-PrivateSubnet2'
 
-  ECSTaskSecurityGroup:
-    Description: Security Group for ECS Tasks
-    Value: !Ref ECSTaskSecurityGroup
+  AppSecurityGroup:
+    Description: Security Group for Lambda/Application
+    Value: !Ref AppSecurityGroup
     Export:
-      Name: !Sub '${Environment}-ECSTaskSecurityGroup'
+      Name: !Sub '${Environment}-AppSecurityGroup'
 
   EFSSecurityGroup:
     Description: Security Group for EFS

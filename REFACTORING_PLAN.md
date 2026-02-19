@@ -4,13 +4,13 @@
 
 Based on your feedback, I'm proposing a refactoring that:
 1. **Replaces global variables with classes** following OOP principles
-2. **Switches from ECS to Lambda** for cost and operational efficiency
+2. **Uses Lambda for deployment** for cost and operational efficiency
 3. **Applies Python best practices** throughout
 
-## Why Lambda > ECS for This Use Case
+## Why Lambda for This Use Case
 
 ### Lambda Advantages
-- **Cost**: ~$2-5/month vs $15-20/month for ECS Fargate
+- **Cost**: ~$2-5/month (very cost-effective)
 - **Simplicity**: No container orchestration needed
 - **Automatic scaling**: Handles concurrent executions if needed
 - **Zero management**: No instances to monitor or patch
@@ -81,7 +81,7 @@ class GarminExporter:
 ### Benefits of This Structure
 1. **Testable**: Can mock `TimestreamWriter` or `GarminClient` in tests
 2. **Clear dependencies**: No hidden global state
-3. **Reusable**: Classes can be used in Lambda, ECS, or locally
+3. **Reusable**: Classes can be used in Lambda or locally
 4. **Type-safe**: Can add type hints effectively
 5. **Maintainable**: Single responsibility principle
 

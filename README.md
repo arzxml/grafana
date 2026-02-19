@@ -8,8 +8,8 @@ Export your Garmin Connect health and fitness data to Amazon Timestream and visu
 - 💓 Heart rate, sleep, steps, stress, VO2 max, activities, and more
 - 🏃 GPS activity tracking with FIT file processing
 - 📈 Grafana dashboards (Amazon Managed Grafana or self-hosted)
-- 🔄 Automatic updates every 5 minutes
-- ☁️ Fully serverless on AWS (ECS Fargate + Timestream)
+- 🔄 Automatic updates every 5 minutes via Lambda
+- ☁️ Fully serverless on AWS (Lambda + Timestream)
 - 🔒 Enterprise security (VPC, IAM, encryption)
 
 ## What Gets Exported
@@ -33,16 +33,18 @@ Export your Garmin Connect health and fitness data to Amazon Timestream and visu
 │                    AWS Cloud                          │
 │                                                       │
 │  ┌─────────────┐   ┌──────────────┐   ┌───────────┐ │
-│  │ ECS Fargate │──▶│  Timestream  │──▶│  Managed  │ │
-│  │   Garmin    │   │  (Database)  │   │  Grafana  │ │
-│  │  Exporter   │   └──────────────┘   └───────────┘ │
-│  └─────────────┘                                     │
-│        │                                             │
-│        ▼                                             │
-│  ┌───────────┐     ┌──────────────┐                 │
-│  │    EFS    │     │   Secrets    │                 │
-│  │  Tokens   │     │   Manager    │                 │
-│  └───────────┘     └──────────────┘                 │
+│  │ EventBridge │──▶│    Lambda    │──▶│Timestream │ │
+│  │ (Schedule)  │   │    Garmin    │   │(Database) │ │
+│  │ Every 5min  │   │   Exporter   │   └───────────┘ │
+│  └─────────────┘   └──────┬───────┘                 │
+│                            │                          │
+│                            ▼                          │
+│                      ┌───────────┐                   │
+│                      │    EFS    │                   │
+│                      │  Tokens   │                   │
+│                      └───────────┘                   │
+│                                                       │
+│  Optional: Amazon Managed Grafana for visualization │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -54,7 +56,7 @@ Export your Garmin Connect health and fitness data to Amazon Timestream and visu
 - Docker installed
 - Garmin Connect account
 
-### Deploy to AWS (30 minutes)
+### Deploy to AWS (20 minutes)
 
 1. **Clone Repository**
    ```bash
@@ -62,7 +64,7 @@ Export your Garmin Connect health and fitness data to Amazon Timestream and visu
    cd grafana
    ```
 
-2. **Run Deployment Script**
+2. **Deploy Base Infrastructure**
    ```bash
    cd aws-infrastructure/scripts
    chmod +x deploy.sh
@@ -83,40 +85,39 @@ Export your Garmin Connect health and fitness data to Amazon Timestream and visu
      }'
    ```
 
-4. **Restart ECS Service**
+4. **Deploy Lambda Function**
    ```bash
-   aws ecs update-service \
-     --cluster production-garmin-exporter-cluster \
-     --service production-garmin-data-exporter \
-     --force-new-deployment
+   chmod +x deploy-lambda.sh
+   ./deploy-lambda.sh
    ```
 
 5. **Verify Deployment**
    ```bash
-   aws logs tail /ecs/garmin-data-exporter --follow
+   aws logs tail /aws/lambda/production-garmin-data-exporter --follow
    ```
 
 **See [AWS_DEPLOYMENT_GUIDE.md](AWS_DEPLOYMENT_GUIDE.md) for detailed instructions.**
 
 ## AWS Services Used
 
+- **AWS Lambda** - Serverless compute (runs every 5 minutes)
 - **Amazon Timestream** - Managed time-series database
-- **Amazon ECS Fargate** - Serverless container orchestration
 - **Amazon Managed Grafana** - Visualization (optional)
 - **AWS Secrets Manager** - Secure credential storage
 - **Amazon EFS** - Persistent token storage
-- **Amazon ECR** - Container registry
+- **Amazon CloudWatch** - Logging and monitoring
+- **Amazon EventBridge** - Scheduled Lambda execution
 - **Amazon CloudWatch** - Logging and monitoring
 - **VPC** - Network isolation
 
 ## Cost Estimate
 
-**Monthly costs:** $34-48 (depending on data volume and Grafana choice)
+**Monthly costs:** $20-35 (significantly lower with Lambda)
 
 | Service | Monthly Cost |
 |---------|--------------|
+| Lambda (288 invocations/day) | $2-3 |
 | Timestream | $15-25 |
-| ECS Fargate | $15-20 |
 | EFS | $0.30 |
 | Secrets Manager | $0.80 |
 | CloudWatch Logs | $2.50 |
@@ -126,7 +127,7 @@ Export your Garmin Connect health and fitness data to Amazon Timestream and visu
 
 ## Configuration
 
-Environment variables can be configured in the ECS task definition:
+Environment variables can be configured in the Lambda function:
 
 ```bash
 # Timestream Configuration
@@ -136,7 +137,6 @@ AWS_REGION=us-east-1
 
 # Application Settings
 LOG_LEVEL=INFO
-UPDATE_INTERVAL_SECONDS=300
 FETCH_SELECTION=daily_avg,sleep,steps,heartrate,stress,breathing,hrv,vo2,activity,race_prediction,body_composition
 
 # Additional optional data types:
@@ -147,7 +147,7 @@ FETCH_SELECTION=daily_avg,sleep,steps,heartrate,stress,breathing,hrv,vo2,activit
 
 ### View Logs
 ```bash
-aws logs tail /ecs/garmin-data-exporter --follow
+aws logs tail /aws/lambda/production-garmin-data-exporter --follow
 ```
 
 ### Query Data
@@ -187,15 +187,20 @@ chmod +x cleanup.sh
 
 ## Troubleshooting
 
-### ECS Task Not Starting
+### Lambda Function Not Running
 ```bash
 # Check logs
-aws logs tail /ecs/garmin-data-exporter --follow
+aws logs tail /aws/lambda/production-garmin-data-exporter --follow
+
+# Test function manually
+aws lambda invoke --function-name production-garmin-data-exporter output.json
+cat output.json
 
 # Common issues:
 # 1. Secrets not configured
 # 2. Invalid Garmin credentials
 # 3. Insufficient IAM permissions
+# 4. VPC/EFS mount issues
 ```
 
 ### No Data in Timestream
@@ -203,10 +208,11 @@ aws logs tail /ecs/garmin-data-exporter --follow
 # Verify database exists
 aws timestream-write describe-database --database-name GarminStats
 
-# Check service is running
-aws ecs describe-services \
-  --cluster production-garmin-exporter-cluster \
-  --services production-garmin-data-exporter
+# Check Lambda executions
+aws lambda get-function --function-name production-garmin-data-exporter
+
+# View EventBridge schedule
+aws events list-rules --name-prefix production-garmin-exporter-schedule
 ```
 
 ## Contributing

@@ -100,7 +100,7 @@ Resources:
           FETCH_SELECTION: daily_avg,sleep,steps,heartrate,stress,breathing,hrv,vo2,activity,race_prediction,body_composition
       VpcConfig:
         SecurityGroupIds:
-          - Fn::ImportValue: !Sub '${Environment}-ECSTaskSecurityGroup'
+          - Fn::ImportValue: !Sub '${Environment}-AppSecurityGroup'
         SubnetIds:
           - Fn::ImportValue: !Sub '${Environment}-PrivateSubnet1'
           - Fn::ImportValue: !Sub '${Environment}-PrivateSubnet2'

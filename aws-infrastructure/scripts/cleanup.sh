@@ -49,10 +49,8 @@ delete_stack() {
 
 # Delete stacks in reverse dependency order
 echo -e "\n${GREEN}Deleting CloudFormation Stacks${NC}"
-delete_stack "garmin-exporter-monitoring"
 delete_stack "garmin-exporter-grafana"
-delete_stack "garmin-exporter-ecs"
-delete_stack "garmin-exporter-ecr"
+delete_stack "garmin-exporter-lambda"
 delete_stack "garmin-exporter-efs"
 delete_stack "garmin-exporter-timestream"
 delete_stack "garmin-exporter-vpc"
@@ -78,7 +76,7 @@ done
 # Delete CloudWatch Log Groups
 echo -e "\n${GREEN}Deleting CloudWatch Log Groups${NC}"
 LOG_GROUPS=(
-    "/ecs/garmin-data-exporter"
+    "/aws/lambda/production-garmin-data-exporter"
 )
 
 for log_group in "${LOG_GROUPS[@]}"; do
