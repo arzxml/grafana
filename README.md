@@ -176,10 +176,32 @@ chmod +x cleanup.sh
 ./cleanup.sh
 ```
 
+## CI/CD Pipeline
+
+This project includes automated CI/CD pipelines using GitHub Actions:
+
+### Continuous Integration (CI)
+- **Triggers:** Pull requests and feature branch pushes
+- **Tests:** Code linting, CloudFormation validation, security scanning
+- **No AWS credentials required**
+
+### Continuous Deployment (CD)
+- **Triggers:** Merges to `master` or `main` branch
+- **Deploys:** Lambda function automatically to AWS
+- **Includes:** Smoke tests and verification
+
+**Setup Instructions:** See [.github/workflows/README.md](.github/workflows/README.md)
+
+**Quick setup:**
+1. Configure AWS OIDC authentication (no access keys needed)
+2. Add GitHub secrets: `AWS_ROLE_ARN`, `LAMBDA_BUCKET_NAME`
+3. Merge to master → automatic deployment!
+
 ## Documentation
 
 - **[AWS_DEPLOYMENT_GUIDE.md](AWS_DEPLOYMENT_GUIDE.md)** - Complete deployment guide
 - **[aws-infrastructure/README.md](aws-infrastructure/README.md)** - Infrastructure details
+- **[.github/workflows/README.md](.github/workflows/README.md)** - CI/CD pipeline setup
 - **CloudFormation templates** in `aws-infrastructure/cloudformation/`
 
 ## Troubleshooting

@@ -40,7 +40,30 @@ Deploy Garmin Data Exporter to AWS using serverless Lambda architecture.
 - Python 3.11+ installed
 - Garmin Connect credentials
 
-## Deployment Steps
+## Deployment Options
+
+### Option 1: Automated CI/CD (Recommended)
+
+Set up GitHub Actions for automatic deployment on every merge to master:
+
+1. **Configure AWS OIDC** (one-time setup)
+2. **Add GitHub Secrets** (`AWS_ROLE_ARN`, `LAMBDA_BUCKET_NAME`)
+3. **Merge to master** → Automatic deployment!
+
+**See [.github/workflows/README.md](.github/workflows/README.md) for detailed setup.**
+
+**Benefits:**
+- ✅ Automatic deployments on code changes
+- ✅ Built-in validation (linting, CloudFormation checks)
+- ✅ No AWS access keys needed (OIDC)
+- ✅ Deployment history and rollback
+- ✅ Free for public repositories
+
+### Option 2: Manual Deployment
+
+Deploy manually using scripts:
+
+## Deployment Steps (Manual)
 
 ### 1. Deploy Base Infrastructure
 
