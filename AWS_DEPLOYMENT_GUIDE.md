@@ -263,11 +263,8 @@ chmod +x cleanup.sh
 
 Or manually delete stacks:
 ```bash
-aws cloudformation delete-stack --stack-name garmin-exporter-monitoring
+aws cloudformation delete-stack --stack-name garmin-exporter-lambda
 aws cloudformation delete-stack --stack-name garmin-exporter-grafana
-aws cloudformation delete-stack --stack-name garmin-exporter-ecs
-aws cloudformation delete-stack --stack-name garmin-exporter-ecr
-aws cloudformation delete-stack --stack-name garmin-exporter-efs
 aws cloudformation delete-stack --stack-name garmin-exporter-timestream
 aws cloudformation delete-stack --stack-name garmin-exporter-vpc
 ```
