@@ -87,7 +87,7 @@ This will:
 - Package the Lambda function with dependencies
 - Upload to S3
 - Deploy Lambda with EventBridge schedule (every 5 minutes)
-- Configure EFS mount for Garmin tokens
+- Configure Secrets Manager for OAuth tokens
 
 ### 4. Verify Lambda Deployment
 
@@ -114,7 +114,7 @@ Success: wrote X records to Timestream
 
 ## Environment Variables
 
-The ECS task uses these environment variables:
+The Lambda function uses these environment variables:
 
 ```bash
 # Timestream Configuration
@@ -196,7 +196,7 @@ aws timestream-query query \
 | Amazon Managed Grafana (optional) | $9 |
 | **Total** | **$18-38/month** |
 
-**Savings vs EFS version:** ~$2-3/month (no EFS, no VPC costs)
+**Savings vs traditional always-on compute:** ~85% reduction in compute costs
 
 ### Cost Optimization
 
@@ -223,7 +223,7 @@ Common issues:
 - Secrets not configured (see step 2)
 - Invalid Garmin credentials
 - Insufficient IAM permissions
-- VPC/EFS mount issues
+- Lambda timeout or memory issues
 
 ### Cannot Write to Timestream
 
@@ -276,12 +276,11 @@ aws cloudformation delete-stack --stack-name garmin-exporter-vpc
 
 ### Implemented Security Controls
 
-- **VPC Isolation**: ECS tasks run in private subnets
-- **Encryption at Rest**: EFS and Timestream data encrypted
+- **Serverless Architecture**: Lambda functions run in AWS-managed environment
+- **Encryption at Rest**: Secrets Manager and Timestream data encrypted
 - **Encryption in Transit**: TLS for all AWS service calls
-- **IAM Roles**: Least-privilege access for ECS tasks
-- **Secrets Manager**: Credentials stored securely
-- **VPC Endpoints**: No internet exposure for AWS services
+- **IAM Roles**: Least-privilege access for Lambda functions
+- **Secrets Manager**: Credentials and OAuth tokens stored securely
 - **CloudWatch Logs**: Audit trail of all application events
 
 ## Support

@@ -20,7 +20,7 @@ Based on your feedback, I'm proposing a refactoring that:
 |------------|----------|
 | 15-minute execution limit | Data fetching typically takes 1-5 minutes |
 | 512MB-10GB memory | Garmin SDK + boto3 fit comfortably in 512MB |
-| /tmp storage only | Use EFS mount for Garmin tokens (persistent) |
+| No persistent storage | Use Secrets Manager for OAuth tokens |
 | Cold starts | Acceptable for periodic 5-min schedule |
 
 ## Refactoring Approach
@@ -118,13 +118,13 @@ Since you want best practices, I'll implement Option A but structure it so:
 ```
 aws-infrastructure/
 ├── cloudformation/
-│   ├── 08-lambda.yaml          # Lambda + EventBridge + EFS
-│   └── 09-lambda-layer.yaml    # Shared dependencies layer
+│   └── 04-lambda.yaml          # Lambda + EventBridge + Secrets Manager
 ├── lambda/
 │   ├── handler.py              # Lambda entry point
 │   ├── config.py               # Configuration class
 │   ├── timestream_writer.py    # Timestream operations
 │   ├── garmin_client.py        # Garmin data fetching
+│   ├── token_manager.py        # Secrets Manager integration
 │   └── requirements.txt        # Lambda dependencies
 └── scripts/
     └── deploy-lambda.sh        # Lambda deployment script
@@ -158,14 +158,14 @@ Events:
 
 ## Cost Comparison
 
-| Service | ECS Fargate | Lambda |
-|---------|-------------|--------|
-| Compute | $15-20/month (always on) | $2-3/month (288 invocations/day) |
+| Service | Traditional Always-On | Lambda Serverless |
+|---------|----------------------|-------------------|
+| Compute | $15-20/month (always on) | $0.50-1/month (288 invocations/day) |
 | Memory | 512MB reserved | 512MB on-demand |
-| Storage (EFS) | $0.30 | $0.30 |
-| Total | **$15.30+** | **$2.30+** |
+| Storage | N/A | Secrets Manager: $0.80/month |
+| Total | **$15-20+** | **$1.30-2+** |
 
-**Savings: ~$13/month (85% reduction in compute costs)**
+**Savings: ~$13-18/month (85-90% reduction in compute costs)**
 
 ## Next Steps
 

@@ -70,7 +70,7 @@ Resources:
         - Key: Type
           Value: Public
 
-  # Private Subnets (for ECS tasks)
+  # Private Subnets (for applications if needed)
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -235,32 +235,6 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.logs'
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      SubnetIds:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-      SecurityGroupIds:
-        - !Ref VPCEndpointSecurityGroup
-
-  ECRApiVPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref VPC
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ecr.api'
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      SubnetIds:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-      SecurityGroupIds:
-        - !Ref VPCEndpointSecurityGroup
-
-  ECRDkrVPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref VPC
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ecr.dkr'
       VpcEndpointType: Interface
       PrivateDnsEnabled: true
       SubnetIds:

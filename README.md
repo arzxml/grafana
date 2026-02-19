@@ -160,7 +160,7 @@ Available in AWS Console → CloudWatch → Dashboards
 
 ✅ VPC isolation with private subnets  
 ✅ IAM roles with least-privilege access  
-✅ Encryption at rest (EFS, Timestream)  
+✅ Encryption at rest (Secrets Manager, Timestream)  
 ✅ Encryption in transit (TLS 1.2+)  
 ✅ AWS Secrets Manager for credentials  
 ✅ CloudWatch audit logging  
@@ -197,7 +197,7 @@ cat output.json
 # 1. Secrets not configured
 # 2. Invalid Garmin credentials
 # 3. Insufficient IAM permissions
-# 4. VPC/EFS mount issues
+# 4. Lambda timeout or memory issues
 ```
 
 ### No Data in Timestream
